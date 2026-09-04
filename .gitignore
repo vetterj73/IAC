@@ -96,3 +96,16 @@ ClientBin/
 *.publishsettings
 PublishScripts/
 StyleCopReport.xml
+
+# ---------------------------------------------------------------------------------------
+# IAC repository configuration
+# ---------------------------------------------------------------------------------------
+# Real configuration names actual organizations, teams and people. Only the example is
+# committed; copy it to repositories.yml and keep that local.
+repositories.yml
+repositories.*.yml
+!examples/repositories.example.yml
+
+# Pulumi self-managed (file://) state and any stack files
+.pulumi-state/
+Pulumi.*.yaml

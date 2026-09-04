@@ -1,0 +1,198 @@
+using System.Collections.Generic;
+
+namespace Iac.Provisioning.Configuration
+{
+    /// <summary>
+    /// The YAML surface for one repository. Every member is nullable so that a value can be
+    /// "not stated here" and inherit from <see cref="IacConfiguration.Defaults"/>. Resolved
+    /// into a <see cref="ResolvedRepository"/> before any provider sees it.
+    /// </summary>
+    public sealed class RepositoryOptions
+    {
+        public string? Name { get; set; }
+
+        public string? Description { get; set; }
+
+        public string? Homepage { get; set; }
+
+        /// <summary><c>private</c>, <c>public</c> or <c>internal</c>.</summary>
+        public string? Visibility { get; set; }
+
+        public string? DefaultBranch { get; set; }
+
+        public IList<string>? Topics { get; set; }
+
+        /// <summary>GitHub license template key, e.g. <c>mit</c>. Null leaves the repo unlicensed.</summary>
+        public string? License { get; set; }
+
+        /// <summary>GitHub .gitignore template name, e.g. <c>VisualStudio</c>.</summary>
+        public string? GitignoreTemplate { get; set; }
+
+        /// <summary>
+        /// When true, <c>destroy</c> archives the repository instead of deleting it. Leaving
+        /// this on is the difference between a recoverable mistake and a lost repository.
+        /// </summary>
+        public bool? ArchiveOnDestroy { get; set; }
+
+        public FeatureOptions? Features { get; set; }
+
+        public MergeOptions? Merge { get; set; }
+
+        public SecurityOptions? Security { get; set; }
+
+        public RulesetOptions? Ruleset { get; set; }
+
+        /// <summary>
+        /// Logins or teams that should approve changes, written into CODEOWNERS. Entries are
+        /// used verbatim, so they must be <c>@user</c> or <c>@org/team</c> form.
+        /// </summary>
+        public IList<string>? Approvers { get; set; }
+
+        public CollaboratorOptions? Collaborators { get; set; }
+
+        public GeneratedFileOptions? Files { get; set; }
+    }
+
+    /// <summary>Per-repository feature toggles. GitHub-specific: Azure DevOps sets these per project.</summary>
+    public sealed class FeatureOptions
+    {
+        public bool? Issues { get; set; }
+
+        public bool? Wiki { get; set; }
+
+        public bool? Projects { get; set; }
+
+        public bool? Discussions { get; set; }
+    }
+
+    public sealed class MergeOptions
+    {
+        public bool? AllowSquash { get; set; }
+
+        public bool? AllowMergeCommit { get; set; }
+
+        public bool? AllowRebase { get; set; }
+
+        public bool? AllowAutoMerge { get; set; }
+
+        public bool? DeleteBranchOnMerge { get; set; }
+
+        public bool? AllowUpdateBranch { get; set; }
+    }
+
+    public sealed class SecurityOptions
+    {
+        public bool? VulnerabilityAlerts { get; set; }
+
+        /// <summary>Requires GitHub Advanced Security on private repositories.</summary>
+        public bool? SecretScanning { get; set; }
+
+        /// <summary>Requires GitHub Advanced Security on private repositories.</summary>
+        public bool? SecretScanningPushProtection { get; set; }
+    }
+
+    /// <summary>
+    /// The branch ruleset applied to the default branch. Maps to a GitHub repository ruleset;
+    /// on Azure DevOps the equivalent is a set of branch policies.
+    /// </summary>
+    public sealed class RulesetOptions
+    {
+        /// <summary><c>active</c>, <c>evaluate</c> (record but do not block) or <c>disabled</c>.</summary>
+        public string? Enforcement { get; set; }
+
+        public bool? RequirePullRequest { get; set; }
+
+        /// <summary>Approving reviews needed before merge. GitHub allows 0-10.</summary>
+        public int? MinimumApprovals { get; set; }
+
+        public bool? DismissStaleReviewsOnPush { get; set; }
+
+        /// <summary>Requires approval from a CODEOWNERS owner. This is what makes Approvers binding.</summary>
+        public bool? RequireCodeOwnerReview { get; set; }
+
+        public bool? RequireLastPushApproval { get; set; }
+
+        public bool? RequireConversationResolution { get; set; }
+
+        public bool? RequireLinearHistory { get; set; }
+
+        public bool? RequireSignedCommits { get; set; }
+
+        /// <summary>Blocks force pushes to the default branch.</summary>
+        public bool? BlockForcePush { get; set; }
+
+        /// <summary>Blocks deletion of the default branch.</summary>
+        public bool? BlockDeletion { get; set; }
+
+        /// <summary>
+        /// Status check contexts that must pass. A check cannot be required until it has
+        /// reported at least once, so this stays empty on a brand-new repository - see
+        /// docs/git/README.md for the two-pass flow.
+        /// </summary>
+        public IList<string>? RequiredStatusChecks { get; set; }
+
+        public IList<BypassActorOptions>? BypassActors { get; set; }
+
+        /// <summary>
+        /// Named reviewers enforced by the ruleset itself rather than by CODEOWNERS. GitHub
+        /// treats this rule as beta; prefer Approvers plus RequireCodeOwnerReview.
+        /// </summary>
+        public IList<RequiredReviewerOptions>? RequiredReviewers { get; set; }
+    }
+
+    /// <summary>An actor allowed to bypass the ruleset - typically a break-glass admin path.</summary>
+    public sealed class BypassActorOptions
+    {
+        /// <summary>Numeric actor id: a role id, team id, integration id or organization admin id.</summary>
+        public int? ActorId { get; set; }
+
+        /// <summary><c>RepositoryRole</c>, <c>Team</c>, <c>Integration</c> or <c>OrganizationAdmin</c>.</summary>
+        public string? ActorType { get; set; }
+
+        /// <summary><c>always</c> or <c>pull_request</c>.</summary>
+        public string? BypassMode { get; set; }
+    }
+
+    public sealed class RequiredReviewerOptions
+    {
+        /// <summary>
+        /// Numeric id of the team that must review. Find it with
+        /// <c>gh api /orgs/{org}/teams/{slug} --jq .id</c>; the provider takes the id, not the slug.
+        /// </summary>
+        public int? Id { get; set; }
+
+        /// <summary>Reviewer kind. The provider currently supports only <c>Team</c>.</summary>
+        public string? Type { get; set; }
+
+        public int? MinimumApprovals { get; set; }
+
+        /// <summary>Paths that trigger this reviewer requirement.</summary>
+        public IList<string>? FilePatterns { get; set; }
+    }
+
+    public sealed class CollaboratorOptions
+    {
+        public IList<CollaboratorEntry>? Users { get; set; }
+
+        public IList<CollaboratorEntry>? Teams { get; set; }
+    }
+
+    public sealed class CollaboratorEntry
+    {
+        /// <summary>User login, or team slug for a team entry.</summary>
+        public string? Name { get; set; }
+
+        /// <summary><c>pull</c>, <c>triage</c>, <c>push</c>, <c>maintain</c> or <c>admin</c>.</summary>
+        public string? Permission { get; set; }
+    }
+
+    /// <summary>Files this tool seeds into a new repository. All are safe to edit afterwards.</summary>
+    public sealed class GeneratedFileOptions
+    {
+        public bool? Readme { get; set; }
+
+        public bool? Codeowners { get; set; }
+
+        public bool? PullRequestTemplate { get; set; }
+    }
+}

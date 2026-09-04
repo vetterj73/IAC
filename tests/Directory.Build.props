@@ -17,6 +17,16 @@
     -->
     <OutputType>Exe</OutputType>
     <!--
+      xUnit v3 runs on Microsoft.Testing.Platform. The .NET 10 SDK dropped VSTest support for
+      MTP, and the opt-in lives in global.json at the repo root ("test": { "runner":
+      "Microsoft.Testing.Platform" }) - not in an MSBuild property. Without it every test run
+      fails with "Testing with VSTest target is no longer supported".
+
+      Consequence: the VSTest-era packages (Microsoft.NET.Test.Sdk,
+      xunit.runner.visualstudio, coverlet.collector) are deliberately absent. Coverage comes
+      from Microsoft.Testing.Extensions.CodeCoverage instead.
+    -->
+    <!--
       Test-only relaxations. Underscores in test method names (CA1707) and missing XML
       docs are normal in tests; the root TreatWarningsAsErrors would otherwise make them
       build breaks.
@@ -25,16 +35,8 @@
   </PropertyGroup>
 
   <ItemGroup Label="Test stack - versions come from Directory.Packages.props">
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="xunit.runner.visualstudio">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="coverlet.collector">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="NSubstitute" />
   </ItemGroup>
