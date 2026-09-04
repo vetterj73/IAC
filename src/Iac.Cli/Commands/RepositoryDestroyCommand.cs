@@ -17,17 +17,6 @@ namespace Iac.Cli.Commands
     /// </summary>
     internal sealed class RepositoryDestroyCommand : AsyncCommand<RepositoryDestroyCommand.Settings>
     {
-        internal sealed class Settings : ConfigurationSettings
-        {
-            [CommandOption("--yes")]
-            [Description("Skip the confirmation prompt. Required when running non-interactively.")]
-            public bool Yes { get; init; }
-
-            [CommandOption("--refresh")]
-            [Description("Reconcile state with the provider before acting.")]
-            public bool Refresh { get; init; }
-        }
-
         protected override async Task<int> ExecuteAsync(
             CommandContext context,
             Settings settings,
@@ -97,6 +86,17 @@ namespace Iac.Cli.Commands
             }
 
             return AnsiConsole.Confirm("Continue?", defaultValue: false);
+        }
+
+        internal sealed class Settings : ConfigurationSettings
+        {
+            [CommandOption("--yes")]
+            [Description("Skip the confirmation prompt. Required when running non-interactively.")]
+            public bool Yes { get; init; }
+
+            [CommandOption("--refresh")]
+            [Description("Reconcile state with the provider before acting.")]
+            public bool Refresh { get; init; }
         }
     }
 }

@@ -31,6 +31,14 @@
          <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors> -->
   </PropertyGroup>
 
+  <ItemGroup Label="Analyzer configuration">
+    <!--
+      StyleCop reads stylecop.json only when it is passed as an AdditionalFile, and the SDK
+      does not include it automatically. One file at the repo root, shared by every project.
+    -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
   <PropertyGroup Label="Hygiene">
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

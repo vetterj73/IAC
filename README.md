@@ -56,6 +56,12 @@ turns warnings into errors, `Directory.Packages.props` holds every package versi
 (central package management — project files carry no versions), and `.editorconfig` holds
 the style and analyzer rules. Project files are deliberately almost empty.
 
+`StyleCop.Analyzers` is referenced repo-wide as a `GlobalPackageReference`, so the `SA*`
+severities in `.editorconfig` are live. Two are worth knowing before you write code:
+**one type per file** (`SA1402`, with a constants file as the documented exception) and
+StyleCop's member ordering, which puts nested types last. Both are spelled out in
+[CLAUDE.md](CLAUDE.md).
+
 ```powershell
 dotnet build      # warnings are errors, code style is enforced in the build
 dotnet test

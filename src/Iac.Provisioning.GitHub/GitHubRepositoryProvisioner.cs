@@ -30,6 +30,15 @@ namespace Iac.Provisioning.GitHub
         /// </summary>
         private const string DefaultBranchToken = "~DEFAULT_BRANCH";
 
+        /// <summary>Seeded pull request template, when the configuration asks for one.</summary>
+        private const string PullRequestTemplate = """
+            ## What changed
+
+            ## Why
+
+            ## How this was verified
+            """;
+
         public string ProviderName => "github";
 
         public string PulumiPluginName => "github";
@@ -478,13 +487,5 @@ namespace Iac.Provisioning.GitHub
         {
             return enabled ? "enabled" : "disabled";
         }
-
-        private const string PullRequestTemplate = """
-            ## What changed
-
-            ## Why
-
-            ## How this was verified
-            """;
     }
 }

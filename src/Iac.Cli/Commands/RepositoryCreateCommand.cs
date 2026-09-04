@@ -18,17 +18,6 @@ namespace Iac.Cli.Commands
     /// </summary>
     internal sealed class RepositoryCreateCommand : AsyncCommand<RepositoryCreateCommand.Settings>
     {
-        internal sealed class Settings : ConfigurationSettings
-        {
-            [CommandOption("--preview")]
-            [Description("Show what would change without changing anything.")]
-            public bool Preview { get; init; }
-
-            [CommandOption("--refresh")]
-            [Description("Reconcile state with the provider before acting, catching drift made in the UI.")]
-            public bool Refresh { get; init; }
-        }
-
         protected override async Task<int> ExecuteAsync(
             CommandContext context,
             Settings settings,
@@ -119,6 +108,17 @@ namespace Iac.Cli.Commands
                         + "approvals, so anyone with write access can self-merge.");
                 }
             }
+        }
+
+        internal sealed class Settings : ConfigurationSettings
+        {
+            [CommandOption("--preview")]
+            [Description("Show what would change without changing anything.")]
+            public bool Preview { get; init; }
+
+            [CommandOption("--refresh")]
+            [Description("Reconcile state with the provider before acting, catching drift made in the UI.")]
+            public bool Refresh { get; init; }
         }
     }
 }

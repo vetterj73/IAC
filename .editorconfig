@@ -19,7 +19,11 @@ tab_width = 4
 
 # New line preferences
 end_of_line = crlf
-insert_final_newline = false
+# Deviation from the shared baseline (which sets this false): every file here ends with a
+# newline, git expects one, and StyleCop's SA1518 enforces whichever way this is set. Set
+# false and SA1518 requires stripping the trailing newline from every file, which fights
+# any editor that re-adds it.
+insert_final_newline = true
 
 #### .NET Coding Conventions ####
 [*.{cs,vb}]
@@ -568,7 +572,11 @@ dotnet_diagnostic.SA1214.severity = error
 dotnet_diagnostic.SA1401.severity = error
 
 # File may only contain a single type
-dotnet_diagnostic.SA1402.severity = none
+# One type per file is mandated - see the C# file organization rule in CLAUDE.md.
+# SA1402 has no notion of a constants file, so that one exception needs an explicit
+# suppression in the constants file itself:
+#   #pragma warning disable SA1402 // constants file: grouped static classes are intentional
+dotnet_diagnostic.SA1402.severity = error
 
 # Code analysis suppression should have justification
 dotnet_diagnostic.SA1404.severity = none
@@ -610,7 +618,8 @@ dotnet_diagnostic.SA1604.severity = none
 dotnet_diagnostic.SA1633.severity = none
 
 # File name should match first type name
-dotnet_diagnostic.SA1649.severity = none
+# The companion to SA1402: one type per file, and the file is named after it.
+dotnet_diagnostic.SA1649.severity = error
 dotnet_style_allow_multiple_blank_lines_experimental = true:silent
 dotnet_style_allow_statement_immediately_after_block_experimental = true:silent
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
