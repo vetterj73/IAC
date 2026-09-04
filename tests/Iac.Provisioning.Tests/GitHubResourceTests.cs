@@ -24,7 +24,8 @@ namespace Iac.Provisioning.Tests
     [Collection(PulumiDeploymentCollection.Name)]
     public class GitHubResourceTests
     {
-        private static async Task<ImmutableArray<Resource>> DeclareAsync(RepositoryOptions options,
+        private static async Task<ImmutableArray<Resource>> DeclareAsync(
+            RepositoryOptions options,
             RepositoryOwnerType ownerType = RepositoryOwnerType.Organization)
         {
             ResolvedRepository repository = RepositoryResolver.Resolve(null, options, ownerType);
@@ -229,8 +230,8 @@ namespace Iac.Provisioning.Tests
             });
 
             ImmutableArray<Github.Outputs.RepositoryRulesetBypassActor> actors =
-                (await resources.OfType<Github.RepositoryRuleset>().Single()
-                    .BypassActors.GetValueAsync());
+                await resources.OfType<Github.RepositoryRuleset>().Single()
+                    .BypassActors.GetValueAsync();
 
             Github.Outputs.RepositoryRulesetBypassActor actor = actors.ShouldHaveSingleItem();
             actor.ActorType.ShouldBe("OrganizationAdmin");

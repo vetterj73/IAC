@@ -37,6 +37,19 @@
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Analyzers">
+    <!--
+      Applies to every project in the repo. StyleCop backs the one-type-per-file rule
+      (SA1402) and the file-naming rule (SA1649) set in .editorconfig; without this package
+      every SA* severity there is inert.
+
+      1.2.0-beta.556 rather than the 1.1.118 "stable": that stable release is from 2019 and
+      predates the C# features this codebase uses (required members, raw string literals,
+      collection expressions). The beta is the version in general use.
+    -->
+    <GlobalPackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+  </ItemGroup>
+
   <ItemGroup Label="CLI and configuration">
     <!--
       Spectre.Console.Cli lags the core Spectre.Console package (0.55.0 vs 0.57.2 at time of

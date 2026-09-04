@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
+  "settings": {
+    "namingRules": {
+      // SA1316 defaults to PascalCase for tuple element names, which contradicts the .NET
+      // convention (tuple elements are named like parameters) and is impossible to satisfy
+      // when implementing an interface that uses camelCase: C# requires the names to match
+      // exactly (CS8141). camelCase keeps the rule enforcing the right thing.
+      "tupleElementNameCasing": "camelCase"
+    }
+  }
+}

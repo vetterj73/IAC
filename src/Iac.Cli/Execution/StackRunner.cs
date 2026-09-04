@@ -13,19 +13,6 @@ using Pulumi.Automation;
 
 namespace Iac.Cli.Execution
 {
-    /// <summary>What to do with a stack.</summary>
-    public enum StackAction
-    {
-        /// <summary>Report the changes that would be made, change nothing.</summary>
-        Preview,
-
-        /// <summary>Apply the configuration.</summary>
-        Apply,
-
-        /// <summary>Remove (or archive) what this stack created.</summary>
-        Destroy,
-    }
-
     /// <summary>
     /// Drives Pulumi through the Automation API with the provisioner's program supplied
     /// inline, so there is no separate Pulumi project on disk and no <c>pulumi</c> CLI
@@ -109,6 +96,22 @@ namespace Iac.Cli.Execution
             };
         }
 
+        private static string Describe(IImmutableDictionary<OperationType, int>? changes)
+        {
+            if (changes is null || changes.Count == 0)
+            {
+                return "no changes";
+            }
+
+            IEnumerable<string> parts = changes
+                .OrderBy(static change => change.Key)
+                .Select(static change =>
+                    change.Key.ToString().ToLowerInvariant()
+                    + " " + change.Value.ToString(CultureInfo.InvariantCulture));
+
+            return string.Join(", ", parts);
+        }
+
         private async Task<StackRunResult> PreviewAsync(
             WorkspaceStack stack,
             bool refresh,
@@ -174,28 +177,5 @@ namespace Iac.Cli.Execution
 
             return variables;
         }
-
-        private static string Describe(IImmutableDictionary<OperationType, int>? changes)
-        {
-            if (changes is null || changes.Count == 0)
-            {
-                return "no changes";
-            }
-
-            IEnumerable<string> parts = changes
-                .OrderBy(static change => change.Key)
-                .Select(static change =>
-                    change.Key.ToString().ToLowerInvariant()
-                    + " " + change.Value.ToString(CultureInfo.InvariantCulture));
-
-            return string.Join(", ", parts);
-        }
-    }
-
-    /// <summary>Outcome of one stack operation.</summary>
-    public sealed class StackRunResult
-    {
-        /// <summary>Human-readable change tally, e.g. <c>create 4, same 1</c>.</summary>
-        public required string Changes { get; init; }
     }
 }

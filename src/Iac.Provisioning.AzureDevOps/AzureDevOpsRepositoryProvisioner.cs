@@ -39,6 +39,18 @@ namespace Iac.Provisioning.AzureDevOps
 
         public IReadOnlyList<string> RequiredEnvironmentVariables => ["AZDO_PERSONAL_ACCESS_TOKEN"];
 
+        /// <summary>
+        /// True when Azure DevOps has to be told the author may approve their own pull request:
+        /// either it was asked for, or no approvals are required and the policy cannot express
+        /// that any other way.
+        /// </summary>
+        public static bool RequiresSelfApproval(ResolvedRepository repository)
+        {
+            ArgumentNullException.ThrowIfNull(repository);
+
+            return repository.Ruleset.RequirePullRequest && repository.Ruleset.MinimumApprovals == 0;
+        }
+
         public IReadOnlyDictionary<string, string> BuildStackConfiguration(string organization)
         {
             ArgumentNullException.ThrowIfNull(organization);
@@ -308,18 +320,6 @@ namespace Iac.Provisioning.AzureDevOps
                         },
                     });
             }
-        }
-
-        /// <summary>
-        /// True when Azure DevOps has to be told the author may approve their own pull request:
-        /// either it was asked for, or no approvals are required and the policy cannot express
-        /// that any other way.
-        /// </summary>
-        public static bool RequiresSelfApproval(ResolvedRepository repository)
-        {
-            ArgumentNullException.ThrowIfNull(repository);
-
-            return repository.Ruleset.RequirePullRequest && repository.Ruleset.MinimumApprovals == 0;
         }
 
         /// <summary>
