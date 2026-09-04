@@ -1,0 +1,63 @@
+<Project>
+
+  <!--
+    Central Package Management. Every package version in the repo lives here and nowhere
+    else: a PackageReference in a .csproj carries Include only, never Version.
+
+    Escape hatch for one project that genuinely needs a different version:
+      <PackageReference Include="Foo" VersionOverride="2.0.0" />
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Pins transitive dependencies to the versions listed here too. Drop it if restore
+         starts failing on a transitive it cannot satisfy. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Infrastructure as code">
+    <PackageVersion Include="Pulumi" Version="3.113.1" />
+    <PackageVersion Include="Pulumi.Automation" Version="3.113.1" />
+    <PackageVersion Include="Pulumi.Github" Version="6.15.0" />
+    <PackageVersion Include="Pulumi.AzureDevOps" Version="3.16.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Transitive pins">
+    <!--
+      Pulumi 3.113.1 pulls OpenTelemetry 1.9.0, which carries two moderate-severity
+      advisories (GHSA-g94r-2vxg-569j, GHSA-4625-4j76-fww9). NuGet audit reports those as
+      NU1902, and TreatWarningsAsErrors turns them into build failures. Because
+      CentralPackageTransitivePinningEnabled is on, naming them here lifts the transitive
+      to a patched 1.x - same major, so it stays compatible with Pulumi.
+
+      Re-check these when Pulumi is upgraded; if Pulumi ships a newer OpenTelemetry these
+      pins can be dropped.
+    -->
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="CLI and configuration">
+    <!--
+      Spectre.Console.Cli lags the core Spectre.Console package (0.55.0 vs 0.57.2 at time of
+      writing). Keep them on the same version: Cli 0.55.0 was built against core 0.55.0, and
+      transitive pinning would otherwise lift core to a version Cli has not been tested with.
+    -->
+    <PackageVersion Include="Spectre.Console" Version="0.55.0" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <!--
+      xUnit v3 on Microsoft.Testing.Platform. The .NET 10 SDK dropped VSTest support for MTP,
+      so Microsoft.NET.Test.Sdk / xunit.runner.visualstudio / coverlet.collector are not used
+      here - see tests/Directory.Build.props.
+    -->
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+  </ItemGroup>
+
+</Project>

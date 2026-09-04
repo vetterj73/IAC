@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Root Directory.Build.props - solution-wide build settings.
+
+    Everything here is inherited by every .csproj at or below this directory, so
+    individual project files stay nearly empty: a ProjectReference/PackageReference
+    ItemGroup and nothing else.
+
+    Placeholders below marked __LIKE_THIS__ are filled in when this file is created.
+    If this file already exists in a repo, it is authoritative - do not rewrite it.
+  -->
+
+  <PropertyGroup Label="Language">
+    <!-- Remove TargetFramework here if any project needs to multi-target
+         (a project that sets <TargetFrameworks> conflicts with an inherited
+         singular <TargetFramework>). -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Quality gates">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <!-- If a wall of pre-existing warnings makes an all-at-once flip impractical,
+         gate it on CI instead of dropping it:
+         <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors> -->
+  </PropertyGroup>
+
+  <PropertyGroup Label="Hygiene">
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDefaultItems>true</EnableDefaultItems>
+  </PropertyGroup>
+
+</Project>

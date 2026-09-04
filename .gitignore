@@ -1,0 +1,111 @@
+## .NET / Visual Studio
+
+# Build output
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+artifacts/
+publish/
+BenchmarkDotNet.Artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sln.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.dotSettings.user
+
+# Test / coverage
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+*.coveragexml
+*.trx
+TestResults/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+.nuget/
+
+# Secrets / local config - never commit these
+appsettings.*.local.json
+*.local.json
+.env
+.env.*
+!.env.example
+secrets.json
+*.pfx
+*.p12
+*.key
+!*.pub.key
+
+# EF Core / SQL Server
+*.mdf
+*.ldf
+*.ndf
+
+# Node (front-end assets inside a .NET repo)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Misc
+*.tmp
+*.bak
+*~
+*.orig
+*.rej
+*.pidb
+*.svclog
+*.scc
+ClientBin/
+*.publishsettings
+PublishScripts/
+StyleCopReport.xml
+
+# ---------------------------------------------------------------------------------------
+# IAC repository configuration
+# ---------------------------------------------------------------------------------------
+# Real configuration names actual organizations, teams and people. Only the example is
+# committed; copy it to repositories.yml and keep that local.
+repositories.yml
+repositories.*.yml
+!examples/repositories.example.yml
+
+# Pulumi self-managed (file://) state and any stack files
+.pulumi-state/
+Pulumi.*.yaml

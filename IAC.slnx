@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Iac.Cli/Iac.Cli.csproj" />
+    <Project Path="src/Iac.Provisioning.AzureDevOps/Iac.Provisioning.AzureDevOps.csproj" />
+    <Project Path="src/Iac.Provisioning.GitHub/Iac.Provisioning.GitHub.csproj" />
+    <Project Path="src/Iac.Provisioning/Iac.Provisioning.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Iac.Provisioning.Tests/Iac.Provisioning.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,206 @@
+# ---------------------------------------------------------------------------------------
+# Example configuration for the `iac repo` commands.
+#
+# Copy this file to repositories.yml (which is git-ignored on purpose - it names real
+# organizations, teams and people) and edit it:
+#
+#     cp examples/repositories.example.yml repositories.yml
+#     iac config validate --config repositories.yml
+#     iac repo create --config repositories.yml --preview
+#
+# Every setting below is optional except `provider`, `organization` and one repository
+# `name`. Anything omitted takes the built-in default shown in the comment.
+#
+# Settings marked [github] have no direct Azure DevOps equivalent, and settings marked
+# [ado-differs] mean something different there. See docs/git/README.md for the mapping.
+# ---------------------------------------------------------------------------------------
+
+# Destination. Selecting the provider here - rather than in the command - is what lets the
+# same file be pointed at a different host by changing one line.
+provider: github                      # github | azuredevops (azuredevops not yet implemented)
+
+# GitHub organization or user that will own the repositories.
+# [ado-differs] For Azure DevOps this is the organization, and each repository also needs a
+# project; project selection is not part of this schema yet.
+organization: contoso
+
+# Whether `organization` above is an organization or a single user account.
+#   organization (default)  teams, organization admins and evaluate mode all exist
+#   user                    a personal repository: no teams, no organization admin, and
+#                           nobody who can approve the owner's own pull requests
+#
+# This changes the default for ruleset.minimumApprovals (1 for an organization, 0 for a
+# user) and turns impossible personal-repository combinations into configuration errors.
+# See examples/personal-repo.example.yml.
+ownerType: organization
+
+# Azure DevOps only: the project that contains the repositories. Ignored by GitHub.
+# project: Platform
+
+backend:
+  # Where Pulumi keeps state. State is what makes a second run a no-op instead of a failed
+  # "repository already exists".
+  #
+  #   file://./.pulumi-state   local, zero setup, NOT shared - a teammate running the same
+  #                            config sees empty state and tries to create the repo again
+  #   azblob://iac-state       shared across the team; needs AZURE_STORAGE_ACCOUNT and either
+  #                            AZURE_STORAGE_KEY or AZURE_STORAGE_SAS_TOKEN
+  #   (omit url)               Pulumi Cloud, needs PULUMI_ACCESS_TOKEN
+  url: file://./.pulumi-state
+
+  # Pulumi project name. Defaults to iac-<provider>. Changing it after repositories exist
+  # orphans their state, so treat it as fixed.
+  # projectName: iac-github
+
+# Applied to every repository below unless the entry overrides it. Note that lists replace
+# rather than merge: an entry's `topics` or `approvers` fully supersede these.
+defaults:
+  visibility: private                 # private | public | internal   (default: private)
+  defaultBranch: main                 # default: main
+  topics: [iac, platform]             # default: none                 [github]
+  # homepage: https://example.internal
+  # license: mit                      # GitHub license template key   [github]
+  gitignoreTemplate: VisualStudio     # GitHub .gitignore template    [github]
+
+  # true  -> `iac repo destroy` archives the repository, history preserved (default)
+  # false -> destroy permanently deletes it, including all history
+  archiveOnDestroy: true
+
+  # [github] Azure DevOps has no per-repository equivalent; Boards/Wiki are per project.
+  features:
+    issues: true                      # default: true
+    wiki: false                       # default: false
+    projects: false                   # default: false
+    discussions: false                # default: false
+
+  merge:
+    allowSquash: true                 # default: true
+    allowMergeCommit: false           # default: false
+    allowRebase: false                # default: false
+    allowAutoMerge: true              # default: true
+    deleteBranchOnMerge: true         # default: true
+    allowUpdateBranch: true           # default: true
+
+  security:
+    vulnerabilityAlerts: true         # default: true
+    # secretScanning and push protection need GitHub Advanced Security on private repos.
+    secretScanning: false             # default: false                [github]
+    secretScanningPushProtection: false
+
+  # Branch ruleset applied to the default branch.
+  # [ado-differs] Azure DevOps expresses these as branch policies - see docs/git.
+  ruleset:
+    # active   -> rules block merges (default)
+    # evaluate -> violations recorded but not blocked; organization-owned repos only.
+    #             Useful for rolling a policy out to existing repositories first.
+    # disabled -> ruleset created but inert
+    enforcement: active
+
+    requirePullRequest: true          # default: true
+
+    # 0-10. Default: 1 for an organization, 0 when ownerType is 'user' - nobody can
+    # approve their own pull request, so on a personal repository any value above 0 locks
+    # the sole owner out unless there is a collaborator or a bypass actor.
+    minimumApprovals: 1
+
+    dismissStaleReviewsOnPush: true   # default: true
+    requireLastPushApproval: false    # default: false
+    requireConversationResolution: true   # default: true
+
+    # Requires an approving review from a CODEOWNERS owner. This is what gives `approvers`
+    # teeth - without it, the approvers list is only advisory. Setting this true with an
+    # empty `approvers` list is rejected: CODEOWNERS would have no owners and no pull
+    # request could ever be approved.
+    requireCodeOwnerReview: true
+
+    requireLinearHistory: false       # default: false; conflicts with allowMergeCommit
+    requireSignedCommits: false       # default: false
+
+    blockForcePush: true              # default: true
+    blockDeletion: true               # default: true
+
+    # A status check cannot be required until it has reported at least once, so this MUST
+    # stay empty when creating a brand-new repository. Add the workflow, let it run, then
+    # list its job name here and re-run `iac repo create`. See docs/git/README.md.
+    requiredStatusChecks: []
+    # requiredStatusChecks:
+    #   - build
+    #   - test
+
+    # Break-glass path. With requirePullRequest on and no bypass, nobody - including an
+    # organization owner - can push directly to the default branch.
+    #
+    # The shorthand: adds an OrganizationAdmin bypass actor. Organization-owned
+    # repositories only; rejected when ownerType is 'user', which has no such actor.
+    allowAdminBypass: false
+
+    # The long form, for anything more specific.
+    #   actorType   RepositoryRole | Team | Integration | OrganizationAdmin | DeployKey |
+    #               EnterpriseOwner | User        (CamelCase)
+    #   actorId     numeric id - REQUIRED for RepositoryRole, Team, Integration and User;
+    #               must be OMITTED for OrganizationAdmin, EnterpriseOwner and DeployKey,
+    #               which have no id (GitHub ignores one if sent)
+    #   bypassMode  always | pull_request | exempt   (lowercase, default always)
+    bypassActors: []
+    # bypassActors:
+    #   - actorType: OrganizationAdmin    # no actorId for this type
+    #     bypassMode: pull_request
+    #   - actorType: User                 # gh api /user --jq .id
+    #     actorId: 583231
+    #     bypassMode: always
+
+    # Azure DevOps only: lets the author of a pull request count towards its approvals
+    # (SubmitterCanVote). GitHub never permits self-approval, so it warns and ignores this.
+    allowSelfApproval: false
+
+    # Azure DevOps only: build-validation pipelines, by numeric id. The Azure DevOps
+    # equivalent of requiredStatusChecks, which names checks by string. Ignored by GitHub.
+    buildValidationPipelineIds: []
+
+    # Named reviewers enforced by the ruleset itself. GitHub documents this rule as beta and
+    # subject to change; `approvers` + requireCodeOwnerReview is the stable equivalent.
+    # `id` is the NUMERIC team id: gh api /orgs/contoso/teams/platform --jq .id
+    requiredReviewers: []
+    # requiredReviewers:
+    #   - id: 1234567
+    #     type: Team                    # only Team is supported by the provider
+    #     minimumApprovals: 1
+    #     filePatterns: ["**/*"]
+
+  # Written into .github/CODEOWNERS. Must be '@user' or '@org/team' - CODEOWNERS silently
+  # ignores entries without the leading '@', which would leave reviews unsatisfiable.
+  # [ado-differs] Azure DevOps has a real required-reviewers policy that takes identities
+  # directly, so there this list maps to a policy rather than to a file.
+  approvers:
+    - '@contoso/platform'
+
+  # Teams and users must already exist; this tool does not create them.
+  collaborators:
+    users: []
+    # users:
+    #   - name: octocat
+    #     permission: push              # pull | triage | push | maintain | admin
+    teams: []
+    # teams:
+    #   - name: platform                # team slug
+    #     permission: maintain
+
+  # Files seeded into the new repository. All are safe to edit afterwards, except that
+  # CODEOWNERS is rewritten on every run while files.codeowners is true.
+  files:
+    readme: true                      # default: true
+    codeowners: true                  # default: true
+    pullRequestTemplate: false        # default: false
+
+# One entry per repository. Each becomes its own Pulumi stack named after the repository,
+# so adding an entry never touches the others.
+repositories:
+  - name: widget-api
+    description: Widget API service
+
+  - name: widget-lib
+    description: Shared widget library
+    topics: [iac, platform, library]
+    ruleset:
+      # Overriding one ruleset value keeps the rest of the defaults' ruleset block.
+      minimumApprovals: 2

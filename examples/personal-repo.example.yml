@@ -1,0 +1,79 @@
+# ---------------------------------------------------------------------------------------
+# A personal (user-owned) GitHub repository.
+#
+# The important line is `ownerType: user`. Nobody can approve their own pull request on
+# GitHub, so on a repository owned by one person a required-approval count above zero
+# means the owner can never merge into their own default branch.
+#
+# Declaring `ownerType: user` does two things:
+#   1. The default for ruleset.minimumApprovals becomes 0 instead of 1. A pull request is
+#      still required - checks still run, the history stays reviewable - but it can be
+#      merged without an approval that nobody could give.
+#   2. Combinations that cannot work on a personal repository become configuration errors
+#      rather than a repository nobody can merge into: an approval count with no
+#      collaborators and no bypass, `internal` visibility, team collaborators, `@org/team`
+#      approvers, evaluate enforcement, and allowAdminBypass.
+#
+#     iac config validate --config personal-repo.yml
+# ---------------------------------------------------------------------------------------
+
+provider: github
+organization: octocat        # a user account, not an organization
+ownerType: user
+
+backend:
+  url: file://./.pulumi-state
+
+defaults:
+  visibility: private        # 'internal' needs an organization
+  defaultBranch: main
+
+  ruleset:
+    enforcement: active      # 'evaluate' needs an organization
+    requirePullRequest: true
+
+    # 0 is the default when ownerType is user. Stated here to make it obvious.
+    # Raising it above 0 requires either a collaborator who can approve, or a
+    # bypassActors entry - otherwise validation refuses the configuration.
+    minimumApprovals: 0
+
+    blockForcePush: true
+    blockDeletion: true
+    requireConversationResolution: true
+
+    # A personal repository has no teams, so code-owner review would need '@you'.
+    requireCodeOwnerReview: false
+
+  # No CODEOWNERS file when there are no approvers to put in it.
+  files:
+    readme: true
+    codeowners: false
+
+repositories:
+  - name: personal-tools
+    description: Scripts and utilities
+
+# ---------------------------------------------------------------------------------------
+# If you do want an approval gate on a personal repository, both of these are valid:
+#
+#   # someone else can approve
+#   repositories:
+#     - name: personal-tools
+#       ruleset:
+#         minimumApprovals: 1
+#       collaborators:
+#         users:
+#           - name: a-trusted-friend
+#             permission: push
+#
+#   # you keep a break-glass bypass for yourself
+#   #   gh api /user --jq .id     -> your numeric user id
+#   repositories:
+#     - name: personal-tools
+#       ruleset:
+#         minimumApprovals: 1
+#         bypassActors:
+#           - actorType: User
+#             actorId: 583231
+#             bypassMode: pull_request
+# ---------------------------------------------------------------------------------------

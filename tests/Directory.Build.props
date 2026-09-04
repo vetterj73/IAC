@@ -1,0 +1,44 @@
+<Project>
+
+  <!--
+    tests/Directory.Build.props - settings for every test project.
+
+    MSBuild stops at the FIRST Directory.Build.props it finds walking up from a project,
+    so this file must explicitly import the root one, and that Import must come first.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      xUnit v3 test projects are stand-alone executables - xunit.v3.core emits a build
+      error if OutputType is not Exe. This is the one non-obvious v3 requirement.
+    -->
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit v3 runs on Microsoft.Testing.Platform. The .NET 10 SDK dropped VSTest support for
+      MTP, and the opt-in lives in global.json at the repo root ("test": { "runner":
+      "Microsoft.Testing.Platform" }) - not in an MSBuild property. Without it every test run
+      fails with "Testing with VSTest target is no longer supported".
+
+      Consequence: the VSTest-era packages (Microsoft.NET.Test.Sdk,
+      xunit.runner.visualstudio, coverlet.collector) are deliberately absent. Coverage comes
+      from Microsoft.Testing.Extensions.CodeCoverage instead.
+    -->
+    <!--
+      Test-only relaxations. Underscores in test method names (CA1707) and missing XML
+      docs are normal in tests; the root TreatWarningsAsErrors would otherwise make them
+      build breaks.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="Test stack - versions come from Directory.Packages.props">
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+</Project>
