@@ -1,0 +1,42 @@
+<Project>
+
+  <!--
+    tests/Directory.Build.props - settings for every test project.
+
+    MSBuild stops at the FIRST Directory.Build.props it finds walking up from a project,
+    so this file must explicitly import the root one, and that Import must come first.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      xUnit v3 test projects are stand-alone executables - xunit.v3.core emits a build
+      error if OutputType is not Exe. This is the one non-obvious v3 requirement.
+    -->
+    <OutputType>Exe</OutputType>
+    <!--
+      Test-only relaxations. Underscores in test method names (CA1707) and missing XML
+      docs are normal in tests; the root TreatWarningsAsErrors would otherwise make them
+      build breaks.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="Test stack - versions come from Directory.Packages.props">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+</Project>

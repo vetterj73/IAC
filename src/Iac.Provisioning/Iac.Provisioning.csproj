@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Pulumi" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Pulumi" />
+    <PackageReference Include="Pulumi.Github" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Iac.Provisioning\Iac.Provisioning.csproj" />
+  </ItemGroup>
+
+</Project>
