@@ -2,6 +2,19 @@ using System.Collections.Generic;
 
 namespace Iac.Provisioning.Configuration
 {
+    /// <summary>Who owns the repositories, which changes what policies are even possible.</summary>
+    public enum RepositoryOwnerType
+    {
+        /// <summary>An organization: teams, organization admins and evaluate mode all exist.</summary>
+        Organization,
+
+        /// <summary>
+        /// A single user account. No teams, no organization admin to bypass a ruleset, and no
+        /// second person to approve a pull request.
+        /// </summary>
+        User,
+    }
+
     /// <summary>
     /// A repository definition after built-in defaults, file defaults and the entry's own
     /// values have been merged. Everything a provider needs is non-null here, so provider
@@ -10,6 +23,9 @@ namespace Iac.Provisioning.Configuration
     public sealed class ResolvedRepository
     {
         public required string Name { get; init; }
+
+        /// <summary>Copied from the root configuration; several rules depend on it.</summary>
+        public required RepositoryOwnerType OwnerType { get; init; }
 
         public string? Description { get; init; }
 
@@ -105,6 +121,12 @@ namespace Iac.Provisioning.Configuration
 
         public required IReadOnlyList<string> RequiredStatusChecks { get; init; }
 
+        public required bool AllowAdminBypass { get; init; }
+
+        public required bool AllowSelfApproval { get; init; }
+
+        public required IReadOnlyList<int> BuildValidationPipelineIds { get; init; }
+
         public required IReadOnlyList<ResolvedBypassActor> BypassActors { get; init; }
 
         public required IReadOnlyList<ResolvedRequiredReviewer> RequiredReviewers { get; init; }
@@ -112,7 +134,8 @@ namespace Iac.Provisioning.Configuration
 
     public sealed class ResolvedBypassActor
     {
-        public required int ActorId { get; init; }
+        /// <summary>Null for actor types that have no id, such as OrganizationAdmin.</summary>
+        public required int? ActorId { get; init; }
 
         public required string ActorType { get; init; }
 

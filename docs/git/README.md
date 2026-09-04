@@ -4,10 +4,10 @@ The `iac` CLI creates source-control repositories and their branch policies from
 file, using Pulumi under the hood. It is written in C# so that a .NET team can read and
 extend the infrastructure code without learning another language.
 
-Today it targets GitHub. The configuration file names its destination, so pointing the
-same file at another host is a one-line change once that provider is implemented — see
-[Adding a provider](#adding-a-provider) and
-[GitHub vs Azure DevOps](#github-vs-azure-devops).
+GitHub and Azure DevOps are both implemented. The configuration file names its
+destination, so pointing the same file at the other host is a one-line change — and the
+CLI tells you which settings that host cannot honour instead of dropping them quietly.
+See [GitHub vs Azure DevOps](#github-vs-azure-devops).
 
 ## Contents
 
@@ -16,6 +16,8 @@ same file at another host is a one-line change once that provider is implemented
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Configuration reference](#configuration-reference)
+- [Personal repositories and the approval trap](#personal-repositories-and-the-approval-trap)
+- [Bypass actors](#bypass-actors)
 - [Why re-running is safe](#why-re-running-is-safe)
 - [Manual steps after creation](#manual-steps-after-creation)
 - [GitHub vs Azure DevOps](#github-vs-azure-devops)
@@ -53,7 +55,16 @@ and the files above. This tool does not own your source.
    pulumi version
    ```
 
-3. **A GitHub token** in `GITHUB_TOKEN`. Scopes:
+3. **Credentials for your destination.**
+
+   For **Azure DevOps**, a personal access token in `AZDO_PERSONAL_ACCESS_TOKEN` with
+   *Code (read, write & manage)* and *Project and team (read)*. The organization comes
+   from the configuration's `organization` (a bare name becomes
+   `https://dev.azure.com/<name>`; a full URL is used as given, for Azure DevOps Server).
+   Azure DevOps also needs `project` in the configuration — repositories live inside a
+   project and this tool does not create projects.
+
+   For **GitHub**, a token in `GITHUB_TOKEN`. Scopes:
 
    | Scope | Needed for |
    |---|---|
@@ -137,8 +148,10 @@ The example file at [`examples/repositories.example.yml`](../../examples/reposit
 documents every setting inline with its default. The shape is:
 
 ```yaml
-provider: github
+provider: github            # github | azuredevops
 organization: contoso
+ownerType: organization     # organization | user
+project: Platform           # Azure DevOps only
 backend:
   url: file://./.pulumi-state
 defaults:
@@ -147,6 +160,10 @@ repositories:
   - name: widget-api
     # overrides
 ```
+
+Three example files are provided: `repositories.example.yml` (a GitHub organization, every
+setting documented inline), `personal-repo.example.yml` (a user-owned repository) and
+`azuredevops.example.yml` (the same schema pointed at Azure DevOps).
 
 **Inheritance.** Precedence is built-in default → `defaults:` → the repository entry.
 Overriding one value inside a block (say `ruleset.minimumApprovals`) keeps the rest of that
@@ -165,6 +182,12 @@ unmergeable or unprotected:
   different route.
 - All three of `merge.allowSquash`, `allowMergeCommit`, `allowRebase` false.
 - `ruleset.requireLinearHistory: true` together with `merge.allowMergeCommit: true`.
+- On GitHub, an `approvers` entry without a leading `@` while a CODEOWNERS file is being
+  written — CODEOWNERS ignores such an owner, so the review requirement would look
+  configured and enforce nothing. (Azure DevOps is the opposite: it wants an identity or
+  email, and a leading `@` is wrong there. Each provider checks its own, which is why the
+  shared schema does not.)
+- The user-owned approval trap, described next.
 
 **Approvers vs required reviewers.** GitHub offers two mechanisms and they are not
 equivalent:
@@ -177,6 +200,91 @@ equivalent:
 | Recommended | Yes | Only if you need approval requirements scoped to file patterns |
 
 Get a numeric team id with `gh api /orgs/<org>/teams/<slug> --jq .id`.
+
+## Personal repositories and the approval trap
+
+`ownerType` says whether `organization` names an organization or a single user account:
+
+```yaml
+organization: octocat
+ownerType: user        # organization (default) | user
+```
+
+It is not cosmetic. **Nobody can approve their own pull request on GitHub.** On a
+repository owned by one person, with nobody else able to approve, `minimumApprovals: 1`
+means the owner can never merge into their own default branch — the repository is
+bricked by its own policy.
+
+So `ownerType: user` changes two things:
+
+1. **The default approval count becomes 0** instead of 1. The pull request is still
+   required, so checks still run and the history stays reviewable; what goes away is an
+   approval nobody could give.
+2. **Combinations that cannot work become configuration errors** rather than a repository
+   nobody can merge into:
+
+   | Rejected on a user-owned repository | Why |
+   |---|---|
+   | `minimumApprovals` above 0 with no collaborators and no bypass | Nobody could ever approve |
+   | `visibility: internal` | Needs an organization |
+   | `collaborators.teams` | A user account has no teams |
+   | `ruleset.enforcement: evaluate` | GitHub supports evaluate only for organizations |
+   | `ruleset.allowAdminBypass` | There is no `OrganizationAdmin` actor to bypass with |
+   | An `@org/team` approver | A user account has no teams |
+
+If you *do* want an approval gate on a personal repository, three things satisfy it, and
+the error message names all three:
+
+```yaml
+# 1. no approval required - the pull request still is
+ruleset:
+  minimumApprovals: 0
+
+# 2. someone else can approve
+ruleset:
+  minimumApprovals: 1
+collaborators:
+  users:
+    - name: a-trusted-friend
+      permission: push
+
+# 3. keep a break-glass bypass for yourself
+#    gh api /user --jq .id
+ruleset:
+  minimumApprovals: 1
+  bypassActors:
+    - actorType: User
+      actorId: 583231
+      bypassMode: pull_request
+```
+
+`examples/personal-repo.example.yml` is a complete worked example.
+
+On **Azure DevOps** the same problem has a different answer: its minimum-reviewers policy
+supports `SubmitterCanVote`, so the author *can* count towards the approvals. That is
+`ruleset.allowSelfApproval`, which GitHub reports as unsupported because it has no such
+concept.
+
+## Bypass actors
+
+`ruleset.allowAdminBypass: true` is the shorthand: it adds an `OrganizationAdmin` bypass,
+which is the usual break-glass path. Organization-owned repositories only.
+
+For anything more specific, `ruleset.bypassActors` takes the full form. GitHub is precise
+about the fields, and the CLI validates them before a run:
+
+| Field | Values |
+|---|---|
+| `actorType` | `RepositoryRole`, `Team`, `Integration`, `OrganizationAdmin`, `DeployKey`, `EnterpriseOwner`, `User` |
+| `actorId` | **Required** for `RepositoryRole`, `Team`, `Integration`, `User`. **Must be omitted** for `OrganizationAdmin`, `EnterpriseOwner`, `DeployKey` — those have no id and GitHub ignores one if sent |
+| `bypassMode` | `always` (default), `pull_request`, `exempt` |
+
+`actorType` is CamelCase and `bypassMode` is lowercase, because that is what the provider
+validates against; the CLI accepts any casing in the file and normalises it.
+
+Without any bypass, a ruleset with `requirePullRequest` genuinely applies to everyone —
+including organization owners. That is usually what you want, but it is worth knowing
+before an incident rather than during one.
 
 ## Why re-running is safe
 
@@ -223,40 +331,63 @@ These cannot be done at creation time, by this tool or any other:
 
 ## GitHub vs Azure DevOps
 
-Kept here so that a configuration written for one is not silently misread when pointed at
-the other.
+Both providers are implemented. Point a file at the other host and
+`iac config validate` prints a warning for every setting that host ignores or
+reinterprets - nothing is dropped silently. This table is what those warnings say.
 
 | Setting | GitHub | Azure DevOps |
 |---|---|---|
-| `organization` | Organization or user | Organization; a **project** is also required, which this schema does not model yet |
-| `visibility` | Per repository | Per **project** — individual repositories inherit it |
-| `features.*` | Per repository (issues, wiki, projects, discussions) | Per project (Boards, Wiki); no per-repository equivalent |
-| `topics` | Per repository | No equivalent |
-| `ruleset.requirePullRequest` | Ruleset `pull_request` rule | Branch policy: *Require a minimum number of reviewers* |
-| `ruleset.minimumApprovals` | `required_approving_review_count` | The same policy's minimum reviewer count |
-| `ruleset.dismissStaleReviewsOnPush` | `dismiss_stale_reviews_on_push` | *Reset votes on source push* |
-| `approvers` | CODEOWNERS file + `requireCodeOwnerReview` | **Required reviewers policy** — takes identities directly, so no file is needed |
-| `ruleset.requireConversationResolution` | `required_review_thread_resolution` | *Comment requirements* policy |
-| `ruleset.requiredStatusChecks` | Ruleset status-check rule | *Build validation* policy, which references a pipeline |
-| `ruleset.requireLinearHistory` | `required_linear_history` | Merge-strategy policy (squash only) |
-| `ruleset.blockForcePush` | `non_fast_forward` | Implicit; force push is a branch permission |
-| `security.secretScanning` | GitHub Advanced Security | Advanced Security for Azure DevOps, licensed separately |
-| Credentials | `GITHUB_TOKEN` | A PAT plus the organization service URL |
+| `organization` | Organization or user | Organization; `project` is also **required** |
+| `ownerType` | Changes the approval default and rejects impossible combinations | Not applicable; `allowSelfApproval` plays that role |
+| `visibility` | Per repository | Ignored - set on the **project**, inherited by its repositories |
+| `features.*` | Per repository (issues, wiki, projects, discussions) | Ignored - Boards and Wiki are per project |
+| `topics`, `license`, `gitignoreTemplate` | Repository settings / creation templates | Ignored - no equivalent |
+| `ruleset.requirePullRequest` | Ruleset `pull_request` rule | Implicit: a **blocking** policy is what prevents direct pushes |
+| `ruleset.minimumApprovals` | `required_approving_review_count`, may be 0 | Minimum-reviewers policy, which requires **at least 1** - a configured 0 becomes 1 reviewer plus self-approval |
+| `ruleset.allowSelfApproval` | Not possible; GitHub never allows self-approval | `SubmitterCanVote` |
+| `ruleset.dismissStaleReviewsOnPush` | `dismiss_stale_reviews_on_push` | `OnPushResetApprovedVotes` |
+| `ruleset.requireLastPushApproval` | `require_last_push_approval` | `LastPusherCannotApprove` |
+| `approvers` | CODEOWNERS file (needs `@user` / `@org/team`) | Automatic-reviewers policy (needs an **identity id or email**; no CODEOWNERS exists) |
+| `ruleset.requireCodeOwnerReview` | Makes CODEOWNERS approval mandatory | Makes the automatic-reviewers policy *blocking* rather than advisory |
+| `ruleset.requireConversationResolution` | `required_review_thread_resolution` | Comment-resolution policy |
+| `ruleset.requiredStatusChecks` | Ruleset status-check rule, by check **name** | Ignored - use `buildValidationPipelineIds`, which takes a pipeline **id** |
+| `ruleset.requireLinearHistory` | `required_linear_history` | Removes the merge-commit strategy from the merge-types policy |
+| `ruleset.enforcement` | `active` / `evaluate` / `disabled` | `active` to blocking; `evaluate` to enabled but non-blocking; `disabled` to policy disabled |
+| `ruleset.requireSignedCommits` | `required_signatures` | Ignored - no branch-policy equivalent |
+| `ruleset.blockForcePush`, `blockDeletion` | `non_fast_forward`, `deletion` | Ignored - branch **permissions**, not policies |
+| `ruleset.allowAdminBypass`, `bypassActors` | Ruleset bypass actors | Ignored - a *bypass policies* permission granted to identities |
+| `security.*` | GitHub Advanced Security | Ignored - Advanced Security for Azure DevOps, licensed separately |
+| `archiveOnDestroy` | Archives instead of deleting | Ignored - no archive; destroy disables the repository |
+| Credentials | `GITHUB_TOKEN` | `AZDO_PERSONAL_ACCESS_TOKEN` |
 
-The practical difference: on GitHub, "who must approve" lives in a file in the repository;
-on Azure DevOps it lives in the policy. That is why `approvers` writes CODEOWNERS here and
-would become a policy there.
+The two differences that bite hardest:
+
+- **"Who must approve" lives in different places.** On GitHub it is a file in the
+  repository (CODEOWNERS); on Azure DevOps it is part of the policy. So the same
+  `approvers` list needs `@org/team` for one and an identity or email for the other, and
+  each provider rejects or warns about the other's form.
+- **Azure DevOps cannot express "a pull request with no approvals".** Its minimum-reviewers
+  policy insists on at least one reviewer, and a blocking policy is what forces the pull
+  request in the first place. A configured `minimumApprovals: 0` therefore becomes one
+  reviewer with self-approval enabled - protected branch, unblocked author - and the CLI
+  says so when it does it.
 
 ## Adding a provider
 
-1. Implement `IResourceProvisioner` (in `Iac.Provisioning`) in a new project, e.g.
-   `Iac.Provisioning.AzureDevOps`.
+`Iac.Provisioning.GitHub` and `Iac.Provisioning.AzureDevOps` are both worked examples of
+the following. To add a third:
+
+1. Implement `IResourceProvisioner` (in `Iac.Provisioning`) in a new project.
 2. Return your provider key from `ProviderName`, the credentials you need from
    `RequiredEnvironmentVariables`, and your provider's Pulumi config from
    `BuildStackConfiguration`.
-3. Report anything in the configuration you cannot honour from
-   `DescribeUnsupportedSettings`. The CLI prints these as warnings, which is how a
-   GitHub-shaped file stays honest when pointed elsewhere.
+3. Report what you cannot honour:
+   - `DescribeUnsupportedSettings` - **warnings**: settings you ignore or reinterpret. This
+     is how a GitHub-shaped file stays honest when pointed elsewhere.
+   - `DescribeConfigurationProblems` - **errors** at the file level, e.g. Azure DevOps
+     needing a `project`.
+   - `DescribeRepositoryProblems` - **errors** per repository, e.g. GitHub rejecting an
+     approver that CODEOWNERS would ignore.
 4. Declare your resources in `Provision`.
 5. Register it in `RunPreparation.CreateRegistry()`.
 
@@ -270,7 +401,8 @@ provider-agnostic.
 | `Iac.Cli` | Command-line surface (Spectre.Console.Cli) and the Pulumi Automation API runner. No provider knowledge beyond the registry. |
 | `Iac.Provisioning` | Configuration model, YAML loading, validation, inheritance, and the `IResourceProvisioner` seam. No provider references. |
 | `Iac.Provisioning.GitHub` | The GitHub implementation. The only project that references `Pulumi.Github`. |
-| `Iac.Provisioning.Tests` | Tests for configuration loading, inheritance, validation and the provisioner's pure logic. |
+| `Iac.Provisioning.AzureDevOps` | The Azure DevOps implementation. The only project that references `Pulumi.AzureDevOps`. |
+| `Iac.Provisioning.Tests` | Configuration loading, inheritance, validation, each provisioner's pure logic, and the resource graph both provisioners declare (via Pulumi's mocked engine). |
 
 Commands are grouped by resource (`iac repo ...`), not by provider, because the destination
 is a configuration setting. Future resource types slot in as new branches (`iac dns ...`).
@@ -282,6 +414,7 @@ demand; if that fails (offline, proxy), install it explicitly:
 
 ```powershell
 pulumi plugin install resource github
+pulumi plugin install resource azuredevops
 ```
 
 **`Testing with VSTest target is no longer supported`** — you removed or broke
@@ -301,10 +434,11 @@ OpenTelemetry.
 **`passphrase must be set`** — a self-managed backend with no passphrase available in the
 environment. Set `PULUMI_CONFIG_PASSPHRASE`.
 
-**A ruleset value is rejected by GitHub** — string values (`enforcement`, `visibility`,
-merge methods) are sent lowercase, matching the GitHub REST API. The Pulumi registry
-documentation renders them capitalised in prose. If a future provider version validates
-strictly on the capitalised form, that is the thing to check first.
+**Value casing** - the GitHub provider validates these case-sensitively: `enforcement`,
+`bypass_mode` and merge methods are **lowercase** (`active`, `always`, `squash`), while
+bypass `actor_type` is **CamelCase** (`OrganizationAdmin`). The CLI accepts any casing in
+the configuration file and normalises it before sending, so this should not bite - but it
+is why the two look inconsistent in the schema.
 
 **`repository already exists`** — almost always mismatched state: a different
 `backend.url`, a different machine's `file://` directory, or a repository created by hand.
@@ -317,12 +451,13 @@ pulumi import github:index/repository:Repository <repo-name> <repo-name>
 
 ## Known gaps
 
-- Azure DevOps is described here but not implemented; `provider: azuredevops` is rejected
-  with a list of known providers.
-- Azure DevOps projects are not modelled.
-- No tests exercise the Pulumi resource graph itself. The configuration layer is covered;
-  the resource shaping is verified with `--preview` against GitHub. Adding
-  `Pulumi.Testing` with mocks would close this.
-- Environments, deployment protection rules, Dependabot configuration and repository
-  secrets are not modelled.
-- Only the default branch gets a ruleset.
+- **Azure DevOps projects are not created.** `project` must name one that already exists.
+- **Azure DevOps repository deletion.** Destroy disables the repository rather than
+  deleting it, and `archiveOnDestroy` has no effect there.
+- **Environments, deployment protection rules, Dependabot configuration and repository
+  secrets** are not modelled on either provider.
+- **Only the default branch gets a ruleset or policy set.** Release branches and tag
+  protection are not covered.
+- **GitHub teams and Azure DevOps identities are not created.** They must exist first.
+- **Neither provider's own settings are read back for drift** beyond what `--refresh`
+  does; there is no "report what differs from the file" command.

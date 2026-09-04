@@ -66,6 +66,7 @@ namespace Iac.Cli.Commands
                         .RunAsync(
                             run.Provisioner,
                             run.Organization,
+                            run.Project,
                             repository,
                             action,
                             settings.Refresh,

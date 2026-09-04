@@ -1,0 +1,97 @@
+# ---------------------------------------------------------------------------------------
+# The same shape of configuration, pointed at Azure DevOps.
+#
+# Only two lines differ from a GitHub file in substance: `provider` and `project`.
+# Everything else is the same schema - but Azure DevOps cannot honour all of it, and the
+# CLI says so rather than dropping settings quietly:
+#
+#     iac config validate --config azuredevops.yml
+#
+# prints a warning for every setting this destination ignores or reinterprets.
+#
+# Prerequisites:
+#   AZDO_PERSONAL_ACCESS_TOKEN   a PAT with Code (read, write & manage) and Project and
+#                                team (read) scopes
+#
+# See docs/git/README.md for the full GitHub-to-Azure-DevOps mapping.
+# ---------------------------------------------------------------------------------------
+
+provider: azuredevops
+
+# Bare organization name -> https://dev.azure.com/<name>.
+# A full URL is used as given, for Azure DevOps Server:
+#   organization: https://tfs.contoso.local/tfs/DefaultCollection
+organization: contoso
+
+# Required for Azure DevOps: repositories live inside a project, and this tool does not
+# create projects. Missing it fails before Pulumi starts.
+project: Platform
+
+backend:
+  url: file://./.pulumi-state
+
+defaults:
+  defaultBranch: main
+
+  # Ignored here: Azure DevOps sets visibility on the project, and every repository in it
+  # inherits that. Left in place so the same file can be pointed back at GitHub.
+  visibility: private
+
+  merge:
+    # Becomes the merge-types branch policy:
+    #   allowSquash        -> Squash merge
+    #   allowMergeCommit   -> Basic merge (no fast-forward)
+    #   allowRebase        -> Rebase and fast-forward
+    allowSquash: true
+    allowMergeCommit: false
+    allowRebase: false
+
+  ruleset:
+    # Azure DevOps has no "require a pull request" switch: a *blocking* policy on the
+    # branch is what prevents direct pushes. So enforcement maps onto the policies:
+    #   active   -> enabled and blocking
+    #   evaluate -> enabled but non-blocking (reports, does not prevent completion)
+    #   disabled -> policies created but disabled
+    enforcement: active
+
+    requirePullRequest: true
+
+    # Becomes the minimum-reviewers policy. Azure DevOps requires at least one reviewer,
+    # so a configured 0 becomes "1 reviewer, and the author may be that reviewer" - which
+    # keeps the branch protected without blocking a lone author. The CLI warns when it
+    # does this.
+    minimumApprovals: 1
+
+    # Azure DevOps supports this directly (SubmitterCanVote); GitHub never does.
+    allowSelfApproval: false
+
+    dismissStaleReviewsOnPush: true     # -> OnPushResetApprovedVotes
+    requireLastPushApproval: false      # -> LastPusherCannotApprove
+    requireConversationResolution: true # -> comment-resolution policy
+    requireLinearHistory: false         # -> removes the merge-commit strategy
+
+    # Azure DevOps build validation references a pipeline by numeric id, so the
+    # string-named requiredStatusChecks used for GitHub cannot apply here.
+    # Same caveat as GitHub, though: the pipeline must exist first.
+    buildValidationPipelineIds: []
+    # buildValidationPipelineIds: [42]
+
+    # Ignored on Azure DevOps (warned about): branch permissions rather than policies.
+    blockForcePush: true
+    blockDeletion: true
+
+  # There is no CODEOWNERS file in Azure DevOps. These become an automatic-reviewers
+  # policy, so they must be Azure DevOps identities - a user email or identity id, never
+  # a GitHub '@org/team' reference. The policy is blocking only when
+  # requireCodeOwnerReview is true.
+  approvers:
+    - reviewer@contoso.com
+
+repositories:
+  - name: widget-api
+    description: Widget API service
+
+  - name: widget-lib
+    description: Shared widget library
+    ruleset:
+      minimumApprovals: 2

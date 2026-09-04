@@ -71,6 +71,7 @@ namespace Iac.Cli.Commands
                     .RunAsync(
                         run.Provisioner,
                         run.Organization,
+                        run.Project,
                         repository,
                         StackAction.Destroy,
                         settings.Refresh,

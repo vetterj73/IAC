@@ -16,18 +16,46 @@ namespace Iac.Provisioning.Configuration
         {
             ArgumentNullException.ThrowIfNull(configuration);
 
+            RepositoryOwnerType ownerType = ParseOwnerType(configuration.OwnerType);
             IList<RepositoryOptions> entries = configuration.Repositories ?? new List<RepositoryOptions>();
-            return entries.Select(entry => Resolve(configuration.Defaults, entry)).ToList();
+            return entries.Select(entry => Resolve(configuration.Defaults, entry, ownerType)).ToList();
+        }
+
+        /// <summary>Parses the configuration's owner type, defaulting to organization.</summary>
+        /// <exception cref="ConfigurationException">The value is not recognized.</exception>
+        public static RepositoryOwnerType ParseOwnerType(string? ownerType)
+        {
+            if (string.IsNullOrWhiteSpace(ownerType))
+            {
+                return RepositoryOwnerType.Organization;
+            }
+
+            if (ownerType.Equals("organization", StringComparison.OrdinalIgnoreCase))
+            {
+                return RepositoryOwnerType.Organization;
+            }
+
+            if (ownerType.Equals("user", StringComparison.OrdinalIgnoreCase))
+            {
+                return RepositoryOwnerType.User;
+            }
+
+            throw new ConfigurationException(
+                $"ownerType '{ownerType}' is not recognized. Use 'organization' or 'user'.");
         }
 
         /// <summary>Resolves a single entry against the supplied defaults.</summary>
-        public static ResolvedRepository Resolve(RepositoryOptions? defaults, RepositoryOptions entry)
+        public static ResolvedRepository Resolve(
+            RepositoryOptions? defaults,
+            RepositoryOptions entry,
+            RepositoryOwnerType ownerType = RepositoryOwnerType.Organization)
         {
             ArgumentNullException.ThrowIfNull(entry);
 
             return new ResolvedRepository
             {
                 Name = entry.Name ?? throw new ConfigurationException("A repository entry is missing 'name'."),
+                OwnerType = ownerType,
                 Description = Pick(entry.Description, defaults?.Description),
                 Homepage = Pick(entry.Homepage, defaults?.Homepage),
                 Visibility = Pick(entry.Visibility, defaults?.Visibility) ?? "private",
@@ -39,7 +67,7 @@ namespace Iac.Provisioning.Configuration
                 Features = ResolveFeatures(defaults?.Features, entry.Features),
                 Merge = ResolveMerge(defaults?.Merge, entry.Merge),
                 Security = ResolveSecurity(defaults?.Security, entry.Security),
-                Ruleset = ResolveRuleset(defaults?.Ruleset, entry.Ruleset),
+                Ruleset = ResolveRuleset(defaults?.Ruleset, entry.Ruleset, ownerType),
                 Approvers = PickList(entry.Approvers, defaults?.Approvers),
                 UserCollaborators = ResolveCollaborators(
                     entry.Collaborators?.Users,
@@ -88,13 +116,23 @@ namespace Iac.Provisioning.Configuration
             };
         }
 
-        private static ResolvedRuleset ResolveRuleset(RulesetOptions? defaults, RulesetOptions? entry)
+        private static ResolvedRuleset ResolveRuleset(
+            RulesetOptions? defaults,
+            RulesetOptions? entry,
+            RepositoryOwnerType ownerType)
         {
+            // The built-in approval count depends on who owns the repository. One approval is
+            // the right default for a team, but on a user-owned repository the sole owner
+            // cannot approve their own pull request, so a default of 1 would lock them out of
+            // their own default branch. Requiring the pull request is still worth keeping -
+            // checks run and the history stays reviewable - so only the count drops.
+            int defaultApprovals = ownerType == RepositoryOwnerType.User ? 0 : 1;
+
             return new ResolvedRuleset
             {
                 Enforcement = Pick(entry?.Enforcement, defaults?.Enforcement) ?? "active",
                 RequirePullRequest = entry?.RequirePullRequest ?? defaults?.RequirePullRequest ?? true,
-                MinimumApprovals = entry?.MinimumApprovals ?? defaults?.MinimumApprovals ?? 1,
+                MinimumApprovals = entry?.MinimumApprovals ?? defaults?.MinimumApprovals ?? defaultApprovals,
                 DismissStaleReviewsOnPush =
                     entry?.DismissStaleReviewsOnPush ?? defaults?.DismissStaleReviewsOnPush ?? true,
                 RequireCodeOwnerReview =
@@ -108,6 +146,10 @@ namespace Iac.Provisioning.Configuration
                 BlockForcePush = entry?.BlockForcePush ?? defaults?.BlockForcePush ?? true,
                 BlockDeletion = entry?.BlockDeletion ?? defaults?.BlockDeletion ?? true,
                 RequiredStatusChecks = PickList(entry?.RequiredStatusChecks, defaults?.RequiredStatusChecks),
+                AllowAdminBypass = entry?.AllowAdminBypass ?? defaults?.AllowAdminBypass ?? false,
+                AllowSelfApproval = entry?.AllowSelfApproval ?? defaults?.AllowSelfApproval ?? false,
+                BuildValidationPipelineIds = ResolveIntList(
+                    entry?.BuildValidationPipelineIds ?? defaults?.BuildValidationPipelineIds),
                 BypassActors = ResolveBypassActors(entry?.BypassActors ?? defaults?.BypassActors),
                 RequiredReviewers = ResolveRequiredReviewers(
                     entry?.RequiredReviewers ?? defaults?.RequiredReviewers),
@@ -124,13 +166,18 @@ namespace Iac.Provisioning.Configuration
             return actors
                 .Select(static actor => new ResolvedBypassActor
                 {
-                    ActorId = actor.ActorId
-                        ?? throw new ConfigurationException("A ruleset bypass actor is missing 'actorId'."),
+                    // Left null on purpose for OrganizationAdmin and friends, which have no id.
+                    ActorId = actor.ActorId,
                     ActorType = actor.ActorType
                         ?? throw new ConfigurationException("A ruleset bypass actor is missing 'actorType'."),
                     BypassMode = actor.BypassMode ?? "always",
                 })
                 .ToList();
+        }
+
+        private static IReadOnlyList<int> ResolveIntList(IList<int>? values)
+        {
+            return values is null ? Array.Empty<int>() : values.ToArray();
         }
 
         private static IReadOnlyList<ResolvedRequiredReviewer> ResolveRequiredReviewers(

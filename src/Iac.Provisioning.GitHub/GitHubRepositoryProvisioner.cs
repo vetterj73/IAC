@@ -46,6 +46,40 @@ namespace Iac.Provisioning.GitHub
             };
         }
 
+        public IReadOnlyList<string> DescribeConfigurationProblems(IacConfiguration configuration)
+        {
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            // GitHub has no project layer; a 'project' key is simply unused rather than wrong.
+            return [];
+        }
+
+        public IReadOnlyList<string> DescribeRepositoryProblems(ResolvedRepository repository)
+        {
+            ArgumentNullException.ThrowIfNull(repository);
+
+            List<string> problems = [];
+
+            // CODEOWNERS silently ignores an owner without a leading '@'. Writing one would
+            // produce a file that looks right and enforces nothing, so it is an error rather
+            // than a warning. Only checked when a CODEOWNERS file is actually written.
+            if (repository.Files.Codeowners)
+            {
+                IEnumerable<string> malformed = repository.Approvers
+                    .Where(static approver => !approver.StartsWith('@'));
+
+                foreach (string approver in malformed)
+                {
+                    problems.Add(
+                        $"approver '{approver}' must be '@user' or '@org/team': CODEOWNERS ignores an "
+                        + "owner without the leading '@', which would leave the review requirement "
+                        + "unenforced. (An Azure DevOps identity or email does not work here.)");
+                }
+            }
+
+            return problems;
+        }
+
         public IReadOnlyList<string> DescribeUnsupportedSettings(ResolvedRepository repository)
         {
             ArgumentNullException.ThrowIfNull(repository);
@@ -84,6 +118,31 @@ namespace Iac.Provisioning.GitHub
                     + "GitHub only supports it for organization-owned repositories.");
             }
 
+            if (repository.Ruleset.AllowSelfApproval)
+            {
+                warnings.Add(
+                    "ruleset.allowSelfApproval has no effect on GitHub, which never lets the author of "
+                    + "a pull request approve it. The equivalent is minimumApprovals: 0, or a "
+                    + "bypassActors entry for the author.");
+            }
+
+            if (repository.Ruleset.BuildValidationPipelineIds.Count > 0)
+            {
+                warnings.Add(
+                    "ruleset.buildValidationPipelineIds is an Azure DevOps setting and is ignored here. "
+                    + "On GitHub, name the checks in ruleset.requiredStatusChecks instead.");
+            }
+
+            if (repository.OwnerType == RepositoryOwnerType.User
+                && repository.Ruleset.RequirePullRequest
+                && repository.Ruleset.MinimumApprovals == 0)
+            {
+                warnings.Add(
+                    "this is a user-owned repository with minimumApprovals: 0, so a pull request is "
+                    + "required but the owner can merge it unreviewed. That is the only workable "
+                    + "arrangement for a single-person repository.");
+            }
+
             return warnings;
         }
 
@@ -96,7 +155,8 @@ namespace Iac.Provisioning.GitHub
             Github.RepositoryArgs repositoryArgs = new()
             {
                 Name = definition.Name,
-                Visibility = definition.Visibility,
+                // Lowercase: the provider validates these values case-sensitively.
+                Visibility = definition.Visibility.ToLowerInvariant(),
                 Topics = definition.Topics.ToArray(),
 
                 // Without an initial commit there is no default branch, so neither the
@@ -208,7 +268,7 @@ namespace Iac.Provisioning.GitHub
                     Name = RulesetName,
                     Repository = repository.Name,
                     Target = "branch",
-                    Enforcement = definition.Ruleset.Enforcement,
+                    Enforcement = definition.Ruleset.Enforcement.ToLowerInvariant(),
                     Conditions = new Github.Inputs.RepositoryRulesetConditionsArgs
                     {
                         RefName = new Github.Inputs.RepositoryRulesetConditionsRefNameArgs
@@ -337,14 +397,55 @@ namespace Iac.Provisioning.GitHub
         private static List<Github.Inputs.RepositoryRulesetBypassActorArgs> BuildBypassActors(
             ResolvedRepository definition)
         {
-            return definition.Ruleset.BypassActors
-                .Select(static actor => new Github.Inputs.RepositoryRulesetBypassActorArgs
+            List<Github.Inputs.RepositoryRulesetBypassActorArgs> actors = [];
+
+            if (definition.Ruleset.AllowAdminBypass)
+            {
+                // OrganizationAdmin carries no actor id - GitHub ignores one if sent.
+                actors.Add(new Github.Inputs.RepositoryRulesetBypassActorArgs
                 {
-                    ActorId = actor.ActorId,
-                    ActorType = actor.ActorType,
-                    BypassMode = actor.BypassMode,
-                })
-                .ToList();
+                    ActorType = "OrganizationAdmin",
+                    BypassMode = "always",
+                });
+            }
+
+            foreach (ResolvedBypassActor actor in definition.Ruleset.BypassActors)
+            {
+                Github.Inputs.RepositoryRulesetBypassActorArgs args = new()
+                {
+                    ActorType = CanonicalActorType(actor.ActorType),
+                    BypassMode = actor.BypassMode.ToLowerInvariant(),
+                };
+
+                // Assigned only when present: Input<int> cannot take a null, and the id-less
+                // actor types must not carry one.
+                if (actor.ActorId is int actorId)
+                {
+                    args.ActorId = actorId;
+                }
+
+                actors.Add(args);
+            }
+
+            return actors;
+        }
+
+        /// <summary>
+        /// The provider validates actor types case-sensitively in CamelCase, while the rest of
+        /// the configuration is lowercase. Accept any casing from the file and emit the exact
+        /// spelling the provider wants.
+        /// </summary>
+        private static string CanonicalActorType(string actorType)
+        {
+            string[] canonical =
+            [
+                "RepositoryRole", "Team", "Integration", "OrganizationAdmin", "DeployKey",
+                "EnterpriseOwner", "User",
+            ];
+
+            return canonical.FirstOrDefault(
+                candidate => candidate.Equals(actorType, StringComparison.OrdinalIgnoreCase))
+                ?? actorType;
         }
 
         /// <summary>

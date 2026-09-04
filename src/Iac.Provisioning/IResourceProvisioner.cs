@@ -36,6 +36,25 @@ namespace Iac.Provisioning
         IReadOnlyList<string> DescribeUnsupportedSettings(ResolvedRepository repository);
 
         /// <summary>
+        /// Provider-level requirements the configuration fails to meet - for example Azure
+        /// DevOps needing a project. Returned rather than thrown so every problem can be
+        /// reported at once, and checked before Pulumi is started.
+        /// </summary>
+        IReadOnlyList<string> DescribeConfigurationProblems(IacConfiguration configuration);
+
+        /// <summary>
+        /// Per-repository settings this destination would reject or silently misapply, as
+        /// errors rather than warnings.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="DescribeUnsupportedSettings"/>: that reports what will be
+        /// ignored, this reports what makes the configuration wrong for this provider.
+        /// Approver syntax is the motivating case - GitHub needs CODEOWNERS form and Azure
+        /// DevOps needs an identity, and neither can be judged provider-agnostically.
+        /// </remarks>
+        IReadOnlyList<string> DescribeRepositoryProblems(ResolvedRepository repository);
+
+        /// <summary>
         /// Declares the resources for one repository. Runs inside a Pulumi program, so it
         /// constructs resources rather than calling an API directly - which is what makes a
         /// second run with the same configuration a no-op.

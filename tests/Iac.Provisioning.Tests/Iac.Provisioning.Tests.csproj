@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Iac.Provisioning\Iac.Provisioning.csproj" />
     <ProjectReference Include="..\..\src\Iac.Provisioning.GitHub\Iac.Provisioning.GitHub.csproj" />
+    <ProjectReference Include="..\..\src\Iac.Provisioning.AzureDevOps\Iac.Provisioning.AzureDevOps.csproj" />
   </ItemGroup>
 
 </Project>

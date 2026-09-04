@@ -59,6 +59,7 @@ namespace Iac.Cli.Execution
         public async Task<StackRunResult> RunAsync(
             IResourceProvisioner provisioner,
             string organization,
+            string? project,
             ResolvedRepository repository,
             StackAction action,
             bool refresh,
@@ -71,6 +72,7 @@ namespace Iac.Cli.Execution
             ProvisioningContext context = new()
             {
                 Organization = organization,
+                Project = project,
                 Repository = repository,
             };
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Iac.Provisioning;
+using Iac.Provisioning.AzureDevOps;
 using Iac.Provisioning.Configuration;
 using Iac.Provisioning.GitHub;
 
@@ -14,6 +15,9 @@ namespace Iac.Cli.Execution
         public required IResourceProvisioner Provisioner { get; init; }
 
         public required string Organization { get; init; }
+
+        /// <summary>Azure DevOps project, or null for providers without a project layer.</summary>
+        public string? Project { get; init; }
 
         public required IReadOnlyList<ResolvedRepository> Repositories { get; init; }
 
@@ -32,7 +36,11 @@ namespace Iac.Cli.Execution
         /// </summary>
         public static ProvisionerRegistry CreateRegistry()
         {
-            return new ProvisionerRegistry([new GitHubRepositoryProvisioner()]);
+            return new ProvisionerRegistry(
+            [
+                new GitHubRepositoryProvisioner(),
+                new AzureDevOpsRepositoryProvisioner(),
+            ]);
         }
 
         /// <summary>Loads and prepares a run.</summary>
@@ -54,6 +62,17 @@ namespace Iac.Cli.Execution
             ProvisionerRegistry registry = CreateRegistry();
             IResourceProvisioner provisioner = registry.Resolve(providerOverride ?? configuration.Provider);
 
+            IReadOnlyList<string> providerProblems = provisioner.DescribeConfigurationProblems(configuration);
+            if (providerProblems.Count > 0)
+            {
+                throw new ConfigurationException(
+                    $"Configuration is not usable with provider '{provisioner.ProviderName}':"
+                    + Environment.NewLine
+                    + string.Join(
+                        Environment.NewLine,
+                        providerProblems.Select(static problem => "  - " + problem)));
+            }
+
             if (requireCredentials)
             {
                 VerifyCredentials(provisioner);
@@ -63,6 +82,17 @@ namespace Iac.Cli.Execution
             foreach (ResolvedRepository repository in repositories)
             {
                 ConfigurationValidator.ValidateResolved(repository);
+
+                IReadOnlyList<string> repositoryProblems = provisioner.DescribeRepositoryProblems(repository);
+                if (repositoryProblems.Count > 0)
+                {
+                    throw new ConfigurationException(
+                        $"Repository '{repository.Name}' is not valid for provider "
+                        + $"'{provisioner.ProviderName}':" + Environment.NewLine
+                        + string.Join(
+                            Environment.NewLine,
+                            repositoryProblems.Select(static problem => "  - " + problem)));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(repositoryFilter))
@@ -90,6 +120,7 @@ namespace Iac.Cli.Execution
             {
                 Provisioner = provisioner,
                 Organization = organization,
+                Project = configuration.Project,
                 Repositories = repositories,
                 Runner = runner,
             };

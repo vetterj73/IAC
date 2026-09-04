@@ -100,21 +100,24 @@ namespace Iac.Provisioning.Tests
         }
 
         [Fact]
-        public void Parse_rejects_an_approver_without_an_at_sign()
+        public void Parse_accepts_an_approver_in_any_shape()
         {
-            // CODEOWNERS silently ignores an owner that is not prefixed with '@', which would
-            // leave the repository with an unsatisfiable review requirement.
+            // Approver syntax is provider-specific: GitHub needs CODEOWNERS form, Azure DevOps
+            // needs an identity or email. The shared loader must not impose either, or a valid
+            // Azure DevOps configuration would be rejected. Each provider checks its own via
+            // DescribeRepositoryProblems.
             string yaml = """
                 provider: github
                 organization: contoso
                 repositories:
                   - name: widget-api
                     approvers:
-                      - platform-team
+                      - reviewer@contoso.com
                 """;
 
-            Should.Throw<ConfigurationException>(() => ConfigurationLoader.Parse(yaml))
-                .Message.ShouldContain("must be '@user' or '@org/team'");
+            IacConfiguration configuration = ConfigurationLoader.Parse(yaml);
+
+            configuration.Repositories![0].Approvers.ShouldBe(new[] { "reviewer@contoso.com" });
         }
 
         [Fact]

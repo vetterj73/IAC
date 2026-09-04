@@ -102,7 +102,12 @@ namespace Iac.Provisioning.Configuration
 
         public bool? RequirePullRequest { get; set; }
 
-        /// <summary>Approving reviews needed before merge. GitHub allows 0-10.</summary>
+        /// <summary>
+        /// Approving reviews needed before merge (0-10). Defaults to 1 for an
+        /// organization-owned repository and <b>0 for a user-owned one</b>: nobody can approve
+        /// their own pull request, so on a personal repository any value above zero leaves the
+        /// owner unable to merge.
+        /// </summary>
         public int? MinimumApprovals { get; set; }
 
         public bool? DismissStaleReviewsOnPush { get; set; }
@@ -131,7 +136,31 @@ namespace Iac.Provisioning.Configuration
         /// </summary>
         public IList<string>? RequiredStatusChecks { get; set; }
 
+        /// <summary>
+        /// Lets an organization administrator bypass the ruleset - the usual break-glass path.
+        /// Organization-owned repositories only: a user-owned repository has no
+        /// <c>OrganizationAdmin</c> actor, so this is rejected there.
+        /// </summary>
+        public bool? AllowAdminBypass { get; set; }
+
+        /// <summary>
+        /// Whether the author of a pull request may count towards its own approvals.
+        /// </summary>
+        /// <remarks>
+        /// Azure DevOps supports this directly (<c>SubmitterCanVote</c>). GitHub does not - it
+        /// never permits self-approval - so setting this true is reported as unsupported by
+        /// the GitHub provider, where the equivalent is <c>minimumApprovals: 0</c>.
+        /// </remarks>
+        public bool? AllowSelfApproval { get; set; }
+
         public IList<BypassActorOptions>? BypassActors { get; set; }
+
+        /// <summary>
+        /// Azure DevOps build-validation pipeline ids. The Azure DevOps equivalent of
+        /// <see cref="RequiredStatusChecks"/>, which references a pipeline by numeric id
+        /// rather than a check by name. Ignored by GitHub.
+        /// </summary>
+        public IList<int>? BuildValidationPipelineIds { get; set; }
 
         /// <summary>
         /// Named reviewers enforced by the ruleset itself rather than by CODEOWNERS. GitHub
@@ -143,13 +172,22 @@ namespace Iac.Provisioning.Configuration
     /// <summary>An actor allowed to bypass the ruleset - typically a break-glass admin path.</summary>
     public sealed class BypassActorOptions
     {
-        /// <summary>Numeric actor id: a role id, team id, integration id or organization admin id.</summary>
+        /// <summary>
+        /// Numeric id of the actor. Required for <c>RepositoryRole</c>, <c>Team</c>,
+        /// <c>Integration</c> and <c>User</c>; it must be <b>omitted</b> for
+        /// <c>OrganizationAdmin</c>, <c>EnterpriseOwner</c> and <c>DeployKey</c>, which have no
+        /// id - GitHub ignores one if sent.
+        /// </summary>
         public int? ActorId { get; set; }
 
-        /// <summary><c>RepositoryRole</c>, <c>Team</c>, <c>Integration</c> or <c>OrganizationAdmin</c>.</summary>
+        /// <summary>
+        /// One of <c>RepositoryRole</c>, <c>Team</c>, <c>Integration</c>,
+        /// <c>OrganizationAdmin</c>, <c>DeployKey</c>, <c>EnterpriseOwner</c>, <c>User</c>.
+        /// Case-sensitive.
+        /// </summary>
         public string? ActorType { get; set; }
 
-        /// <summary><c>always</c> or <c>pull_request</c>.</summary>
+        /// <summary><c>always</c>, <c>pull_request</c> or <c>exempt</c>. Case-sensitive.</summary>
         public string? BypassMode { get; set; }
     }
 

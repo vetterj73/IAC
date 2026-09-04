@@ -19,6 +19,7 @@
     <PackageVersion Include="Pulumi" Version="3.113.1" />
     <PackageVersion Include="Pulumi.Automation" Version="3.113.1" />
     <PackageVersion Include="Pulumi.Github" Version="6.15.0" />
+    <PackageVersion Include="Pulumi.AzureDevOps" Version="3.16.0" />
   </ItemGroup>
 
   <ItemGroup Label="Transitive pins">

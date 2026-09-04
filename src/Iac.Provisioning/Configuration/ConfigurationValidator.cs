@@ -18,6 +18,23 @@ namespace Iac.Provisioning.Configuration
 
         private static readonly string[] Permissions = ["pull", "triage", "push", "maintain", "admin"];
 
+        private static readonly string[] OwnerTypes = ["organization", "user"];
+
+        /// <summary>Actor types GitHub accepts on a ruleset bypass entry.</summary>
+        private static readonly string[] ActorTypes =
+        [
+            "RepositoryRole", "Team", "Integration", "OrganizationAdmin", "DeployKey",
+            "EnterpriseOwner", "User",
+        ];
+
+        /// <summary>
+        /// Actor types that have no id. GitHub ignores an id sent for these, so accepting one
+        /// silently would hide a mistake.
+        /// </summary>
+        private static readonly string[] IdlessActorTypes = ["OrganizationAdmin", "EnterpriseOwner", "DeployKey"];
+
+        private static readonly string[] BypassModes = ["always", "pull_request", "exempt"];
+
         private static readonly Regex RepositoryNamePattern =
             new("^[A-Za-z0-9._-]+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
@@ -37,6 +54,14 @@ namespace Iac.Provisioning.Configuration
             if (string.IsNullOrWhiteSpace(configuration.Organization))
             {
                 problems.Add("'organization' is required.");
+            }
+
+            if (configuration.OwnerType is not null
+                && !OwnerTypes.Contains(configuration.OwnerType, StringComparer.OrdinalIgnoreCase))
+            {
+                problems.Add(
+                    $"ownerType '{configuration.OwnerType}' is not recognized. Use "
+                    + string.Join(" or ", OwnerTypes) + ".");
             }
 
             if (configuration.Repositories is null || configuration.Repositories.Count == 0)
@@ -113,7 +138,11 @@ namespace Iac.Provisioning.Configuration
 
             ValidateRuleset(options.Ruleset, scope, problems);
             ValidateCollaborators(options.Collaborators, scope, problems);
-            ValidateApprovers(options.Approvers, scope, problems);
+
+            // Approver syntax is deliberately NOT checked here. GitHub needs CODEOWNERS form
+            // ('@user', '@org/team'); Azure DevOps needs an identity id or email and would be
+            // broken by a leading '@'. Each provider validates its own via
+            // IResourceProvisioner.DescribeRepositoryProblems.
         }
 
         private static void ValidateRuleset(RulesetOptions? ruleset, string scope, List<string> problems)
@@ -134,6 +163,50 @@ namespace Iac.Provisioning.Configuration
             if (ruleset.MinimumApprovals is < 0 or > 10)
             {
                 problems.Add($"{scope}: ruleset minimumApprovals must be between 0 and 10.");
+            }
+
+            foreach (BypassActorOptions actor in ruleset.BypassActors ?? [])
+            {
+                ValidateBypassActor(actor, scope, problems);
+            }
+        }
+
+        private static void ValidateBypassActor(BypassActorOptions actor, string scope, List<string> problems)
+        {
+            if (string.IsNullOrWhiteSpace(actor.ActorType))
+            {
+                problems.Add($"{scope}: a ruleset bypass actor is missing 'actorType'.");
+                return;
+            }
+
+            if (!ActorTypes.Contains(actor.ActorType, StringComparer.OrdinalIgnoreCase))
+            {
+                problems.Add(
+                    $"{scope}: bypass actorType '{actor.ActorType}' is not one of "
+                    + string.Join(", ", ActorTypes) + ".");
+                return;
+            }
+
+            if (actor.BypassMode is not null
+                && !BypassModes.Contains(actor.BypassMode, StringComparer.OrdinalIgnoreCase))
+            {
+                problems.Add(
+                    $"{scope}: bypass mode '{actor.BypassMode}' is not one of "
+                    + string.Join(", ", BypassModes) + ".");
+            }
+
+            bool idless = IdlessActorTypes.Contains(actor.ActorType, StringComparer.OrdinalIgnoreCase);
+
+            if (idless && actor.ActorId is not null)
+            {
+                problems.Add(
+                    $"{scope}: bypass actorType '{actor.ActorType}' has no actorId - GitHub ignores one "
+                    + "if sent, so remove it.");
+            }
+            else if (!idless && actor.ActorId is null)
+            {
+                problems.Add(
+                    $"{scope}: bypass actorType '{actor.ActorType}' requires a numeric 'actorId'.");
             }
         }
 
@@ -180,11 +253,78 @@ namespace Iac.Provisioning.Configuration
                     + "a merge commit can never satisfy a linear-history rule.");
             }
 
+            if (repository.OwnerType == RepositoryOwnerType.User)
+            {
+                ValidateUserOwned(repository, problems);
+            }
+
             if (problems.Count > 0)
             {
                 throw new ConfigurationException(
                     $"Repository '{repository.Name}' is not valid:" + Environment.NewLine
                     + string.Join(Environment.NewLine, problems.Select(static problem => "  - " + problem)));
+            }
+        }
+
+        /// <summary>
+        /// Rules that only apply to a user-owned (personal) repository. A personal repository
+        /// has no teams, no organization administrator and - critically - no second person to
+        /// approve a pull request.
+        /// </summary>
+        private static void ValidateUserOwned(ResolvedRepository repository, List<string> problems)
+        {
+            ResolvedRuleset ruleset = repository.Ruleset;
+
+            bool hasBypass = ruleset.BypassActors.Count > 0 || ruleset.AllowAdminBypass;
+            bool hasOtherPeople = repository.UserCollaborators.Count > 0;
+
+            // The lockout. GitHub does not let anyone approve their own pull request, so on a
+            // repository owned by one person, with nobody else able to approve and no bypass,
+            // any required-approval count makes the default branch permanently unmergeable.
+            if (ruleset.RequirePullRequest && ruleset.MinimumApprovals > 0 && !hasBypass && !hasOtherPeople)
+            {
+                problems.Add(
+                    $"ownerType is 'user' and ruleset.minimumApprovals is {ruleset.MinimumApprovals}, but "
+                    + "nobody can approve their own pull request. As configured, the owner could never "
+                    + "merge into the default branch. Pick one: set ruleset.minimumApprovals to 0 (the "
+                    + "pull request is still required, so checks still run), or add collaborators who can "
+                    + "approve, or add a ruleset.bypassActors entry for the owner "
+                    + "(actorType 'User' with their numeric id from 'gh api /user --jq .id').");
+            }
+
+            if (string.Equals(repository.Visibility, "internal", StringComparison.OrdinalIgnoreCase))
+            {
+                problems.Add("visibility 'internal' requires an organization; a user-owned repository "
+                    + "can only be 'private' or 'public'.");
+            }
+
+            if (repository.TeamCollaborators.Count > 0)
+            {
+                problems.Add("collaborators.teams requires an organization; a user-owned repository has "
+                    + "no teams. Use collaborators.users instead.");
+            }
+
+            if (string.Equals(ruleset.Enforcement, "evaluate", StringComparison.OrdinalIgnoreCase))
+            {
+                problems.Add("ruleset.enforcement 'evaluate' is only supported for organization-owned "
+                    + "repositories. Use 'active' or 'disabled'.");
+            }
+
+            if (ruleset.AllowAdminBypass)
+            {
+                problems.Add("ruleset.allowAdminBypass adds an OrganizationAdmin bypass actor, which does "
+                    + "not exist for a user-owned repository. Use a ruleset.bypassActors entry with "
+                    + "actorType 'User' instead.");
+            }
+
+            IEnumerable<string> teamApprovers = repository.Approvers
+                .Where(static approver => approver.Contains('/', StringComparison.Ordinal));
+
+            foreach (string approver in teamApprovers)
+            {
+                problems.Add(
+                    $"approver '{approver}' names a team, which requires an organization. A user-owned "
+                    + "repository can only have '@user' code owners.");
             }
         }
 
@@ -218,22 +358,5 @@ namespace Iac.Provisioning.Configuration
             }
         }
 
-        private static void ValidateApprovers(IList<string>? approvers, string scope, List<string> problems)
-        {
-            if (approvers is null)
-            {
-                return;
-            }
-
-            foreach (string approver in approvers)
-            {
-                if (!approver.StartsWith('@'))
-                {
-                    problems.Add(
-                        $"{scope}: approver '{approver}' must be '@user' or '@org/team' - CODEOWNERS "
-                        + "requires the leading '@'.");
-                }
-            }
-        }
     }
 }

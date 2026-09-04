@@ -24,6 +24,19 @@ provider: github                      # github | azuredevops (azuredevops not ye
 # project; project selection is not part of this schema yet.
 organization: contoso
 
+# Whether `organization` above is an organization or a single user account.
+#   organization (default)  teams, organization admins and evaluate mode all exist
+#   user                    a personal repository: no teams, no organization admin, and
+#                           nobody who can approve the owner's own pull requests
+#
+# This changes the default for ruleset.minimumApprovals (1 for an organization, 0 for a
+# user) and turns impossible personal-repository combinations into configuration errors.
+# See examples/personal-repo.example.yml.
+ownerType: organization
+
+# Azure DevOps only: the project that contains the repositories. Ignored by GitHub.
+# project: Platform
+
 backend:
   # Where Pulumi keeps state. State is what makes a second run a no-op instead of a failed
   # "repository already exists".
@@ -84,7 +97,11 @@ defaults:
     enforcement: active
 
     requirePullRequest: true          # default: true
-    minimumApprovals: 1               # 0-10, default: 1
+
+    # 0-10. Default: 1 for an organization, 0 when ownerType is 'user' - nobody can
+    # approve their own pull request, so on a personal repository any value above 0 locks
+    # the sole owner out unless there is a collaborator or a bypass actor.
+    minimumApprovals: 1
 
     dismissStaleReviewsOnPush: true   # default: true
     requireLastPushApproval: false    # default: false
@@ -110,13 +127,35 @@ defaults:
     #   - build
     #   - test
 
-    # Break-glass path. With requirePullRequest on and no bypass actors, nobody - including
-    # an organization owner - can push directly to the default branch.
+    # Break-glass path. With requirePullRequest on and no bypass, nobody - including an
+    # organization owner - can push directly to the default branch.
+    #
+    # The shorthand: adds an OrganizationAdmin bypass actor. Organization-owned
+    # repositories only; rejected when ownerType is 'user', which has no such actor.
+    allowAdminBypass: false
+
+    # The long form, for anything more specific.
+    #   actorType   RepositoryRole | Team | Integration | OrganizationAdmin | DeployKey |
+    #               EnterpriseOwner | User        (CamelCase)
+    #   actorId     numeric id - REQUIRED for RepositoryRole, Team, Integration and User;
+    #               must be OMITTED for OrganizationAdmin, EnterpriseOwner and DeployKey,
+    #               which have no id (GitHub ignores one if sent)
+    #   bypassMode  always | pull_request | exempt   (lowercase, default always)
     bypassActors: []
     # bypassActors:
-    #   - actorType: OrganizationAdmin   # RepositoryRole | Team | Integration | OrganizationAdmin
-    #     actorId: 1
-    #     bypassMode: pull_request       # always | pull_request
+    #   - actorType: OrganizationAdmin    # no actorId for this type
+    #     bypassMode: pull_request
+    #   - actorType: User                 # gh api /user --jq .id
+    #     actorId: 583231
+    #     bypassMode: always
+
+    # Azure DevOps only: lets the author of a pull request count towards its approvals
+    # (SubmitterCanVote). GitHub never permits self-approval, so it warns and ignores this.
+    allowSelfApproval: false
+
+    # Azure DevOps only: build-validation pipelines, by numeric id. The Azure DevOps
+    # equivalent of requiredStatusChecks, which names checks by string. Ignored by GitHub.
+    buildValidationPipelineIds: []
 
     # Named reviewers enforced by the ruleset itself. GitHub documents this rule as beta and
     # subject to change; `approvers` + requireCodeOwnerReview is the stable equivalent.
